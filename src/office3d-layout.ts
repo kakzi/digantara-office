@@ -23,14 +23,19 @@ import type { OfficeStation } from './types.ts'
 // furniture below, so they use doors and walk around desks and tables.
 
 export type Vec3 = [number, number, number]
-export type Floor = 1 | 2
+export type Floor = 1 | 2 | 3
 export interface Rect { minX: number; maxX: number; minZ: number; maxZ: number }
 const rect = (minX: number, maxX: number, minZ: number, maxZ: number): Rect => ({ minX, maxX, minZ, maxZ })
 export const inside = (area: Rect, x: number, z: number, margin = 0) => x > area.minX - margin && x < area.maxX + margin && z > area.minZ - margin && z < area.maxZ + margin
 
 /** Height of lantai 2's floor above the ground. */
 export const FLOOR_HEIGHT = 2.8
-export const floorOf = (position: Vec3 | number): Floor => ((typeof position === 'number' ? position : position[1]) > FLOOR_HEIGHT / 2 ? 2 : 1)
+export const floorOf = (position: Vec3 | number): Floor => {
+  const y = typeof position === 'number' ? position : position[1]
+  if (y > FLOOR_HEIGHT * 1.5) return 3
+  if (y > FLOOR_HEIGHT * 0.5) return 2
+  return 1
+}
 export const WALL_HEIGHT = 2.6
 
 export const BUILDING = rect(-14, 14, -10.5, 10.5)
@@ -140,6 +145,16 @@ export const WALLS: Record<Floor, WallSpec[]> = {
     ...wall([STAIRS.highX, STAIRS.z - STAIRS.width / 2 - 0.05], [STAIRS.lowX, STAIRS.z - STAIRS.width / 2 - 0.05], 1, [], { railing: true }),
     ...wall([STAIRS.lowX, STAIRS.z - STAIRS.width / 2 - 0.05], [STAIRS.lowX, BUILDING.maxZ], 1, [], { railing: true }),
   ],
+  3: [
+    // Glass walls for CEO Executive Suite
+    ...wall([5.5, 3.5], [13.5, 3.5], 1, [[7, 8.5]], { glass: 2.4 }),
+    ...wall([5.5, 3.5], [5.5, 10.1], 1, [[5, 6.5]], { glass: 2.4 }),
+    // Perimeter minimalist glass railings round entire rooftop
+    ...wall([-14, 10.5], [14, 10.5], 1, [], { railing: true }),
+    ...wall([-14, -10.5], [14, -10.5], 1, [], { railing: true }),
+    ...wall([-14, -10.5], [-14, 10.5], 1, [], { railing: true }),
+    ...wall([14, -10.5], [14, 10.5], 1, [], { railing: true }),
+  ],
 }
 
 export type Flooring = 'wood' | 'terrazzo' | 'tile' | 'grass' | 'concrete' | `carpet:${string}`
@@ -169,6 +184,21 @@ export const FLOORINGS: Record<Floor, { area: Rect; material: Flooring }[]> = {
     // Artificial grass at the rooftop cinema, a wooden deck under the pergola
     { area: rect(-2.7, 3.5, -3.6, 1.4), material: 'grass' },
     { area: rect(6.6, 11.4, -3.7, 0.1), material: 'wood' },
+  ],
+  3: [
+    { area: BUILDING, material: 'tile' },
+    // CEO Executive Penthouse with deep slate carpet and wood border
+    { area: rect(5.5, 13.5, 3.5, 10.1), material: 'carpet:#1e293b' },
+    // Rooftop Cinema artificial turf
+    { area: rect(-13.5, -4.5, 3.5, 10.1), material: 'grass' },
+    // Sky Gym rubber flooring
+    { area: rect(-13.5, -6.5, -10.1, -4.5), material: 'carpet:#0f172a' },
+    // Rooftop Sky Garden & Saung
+    { area: rect(-6.5, 0.5, -10.1, -4.5), material: 'grass' },
+    // Pergola & BBQ deck
+    { area: rect(0.5, 7.5, -10.1, -4.5), material: 'wood' },
+    // Sun deck
+    { area: rect(7.5, 13.5, -10.1, -4.5), material: 'tile' },
   ],
 }
 
@@ -319,6 +349,35 @@ export const ITEMS: Record<Floor, Item[]> = {
     solid('fishPond', [FISH_POND[0], 0, FISH_POND[2]], [2, 1.6]), solid('saung', [SAUNG[0], 0, SAUNG[2]], [2.4, 2]),
     decor('clothesLine', [-9.5, 0, 9.6]), solid('washingMachine', [-6.9, 0, 9.95], [0.6, 0.6]), solid('washingMachine', [-6.2, 0, 9.95], [0.6, 0.6]),
     ...[-10.2, -3.8, 2.5].map((x) => decor('window', [x, 1.55, BUILDING.minZ + 0.14])),
+  ],
+  3: [
+    // Executive Penthouse Suite for CEO
+    solid('sofa', [13.3, 0, 7], [2.4, 0.9], -R, { color: '#1e293b' }),
+    solid('coffeeTable', [12, 0, 7], [1.3, 0.7], R),
+    solid('trophy', [8.6, 0, 5], [1.6, 0.45]),
+    solid('plant', [13.5, 0, 10.05], [0.5, 0.5]),
+    solid('plant', [6.5, 0, 10.05], [0.5, 0.5]),
+    // Sky Cinema
+    solid('projectorScreen', [CINEMA_SCREEN[0], 0, CINEMA_SCREEN[2]], [3.6, 0.3]),
+    solid('projector', [0.4, 0, 1.1], [0.45, 0.45]),
+    ...CINEMA_SEATS.map(([x, , z], index) => decor('beanbag', [x, 0, z], 0, { color: ['#f97316', '#06b6d4', '#8b5cf6', '#10b981', '#f43f5e', '#eab308'][index] })),
+    // Sky Gym
+    ...TREADMILLS.map(([x, , z]) => solid('treadmill', [x, 0, z], [0.8, 1.8])),
+    solid('dumbbellRack', [13.6, 0, -7.6], [1.4, 0.45], -R),
+    solid('punchingBag', [13.3, 0, -5.3], [0.6, 0.6], -R),
+    ...YOGA_MATS.map(([x, , z], index) => decor('yogaMat', [x, 0, z], 0, { color: index ? '#06b6d4' : '#8b5cf6' })),
+    // Rooftop Dining & Pergola BBQ
+    solid('picnicTable', [PICNIC_TABLE[0], 0, PICNIC_TABLE[2]], [3, 2], 0, { length: 3 }),
+    decor('pergola', [PICNIC_TABLE[0], 0, PICNIC_TABLE[2]], 0, { length: 4.2 }),
+    solid('grill', [GRILL[0], 0, GRILL[2]], [1, 0.5], -R),
+    // Sun Deck & Hammock
+    ...SUN_LOUNGERS.map(([x, , z], index) => solid('sunLounger', [x, 0, z], [0.7, 1.4], R, { color: index ? '#f59e0b' : '#10b981' })),
+    solid('hammock', [HAMMOCK[0], 0, HAMMOCK[2]], [2.6, 0.8]),
+    decor('stringLights', [0, 2.15, BUILDING.maxZ - 0.12], 0, { length: 27 }),
+    // Rooftop Zen Garden with Saung & Koi Pond
+    solid('fishPond', [FISH_POND[0], 0, FISH_POND[2]], [2, 1.6]),
+    solid('saung', [SAUNG[0], 0, SAUNG[2]], [2.4, 2]),
+    ...[[-11.5, 4], [-7.5, 4]].map(([x, z]) => solid('planter', [x, 0, z], [2.4, 0.8], 0, { length: 2.4 })),
   ],
 }
 
@@ -595,7 +654,7 @@ const CELL = 0.2
 /** How far agents keep from walls and furniture (about their half width). */
 export const CLEARANCE = 0.25
 const WALL_THICKNESS = 0.25
-const GRID_BOUNDS: Record<Floor, Rect> = { 1: rect(-19.5, 20, -12.5, 13.6), 2: BUILDING }
+const GRID_BOUNDS: Record<Floor, Rect> = { 1: rect(-19.5, 20, -12.5, 13.6), 2: BUILDING, 3: BUILDING }
 
 /** The ground an item covers, as an axis-aligned rectangle (rotations are quarter turns). */
 export function footprint(item: Pick<Item, 'at' | 'size' | 'rotation'>): Rect {
@@ -616,7 +675,7 @@ const BED_SIZE: [number, number] = [1.05, 2.05]
 export function obstacles(layout: OfficeLayout, floor: Floor): Rect[] {
   const blocks = [...WALLS[floor].map(wallRect), ...ITEMS[floor].filter((item) => item.solid).map(footprint)]
   if (floor === 1) {
-    for (const desk of layout.deskInfo) if (!desk.hot) blocks.push(footprint({ at: desk.position, size: desk.executive ? EXECUTIVE_DESK_SIZE : DESK_SIZE }))
+    for (const desk of layout.deskInfo) if (!desk.hot && floorOf(desk.position) === 1) blocks.push(footprint({ at: desk.position, size: desk.executive ? EXECUTIVE_DESK_SIZE : DESK_SIZE }))
     // The road
     blocks.push(rect(-30, 30, 13.6, 30))
   } else {
@@ -804,9 +863,9 @@ export function walkPath3(from: Vec3, to: Vec3, layout: OfficeLayout = DEFAULT_L
   const at = (y: number) => ([x, z]: [number, number]): Vec3 => [x, y, z]
   const fromFloor = floorOf(from)
   const toFloor = floorOf(to)
-  const level = (floor: Floor) => (floor === 1 ? 0 : FLOOR_HEIGHT)
+  const level = (floor: Floor) => (floor === 3 ? FLOOR_HEIGHT * 2 : floor === 2 ? FLOOR_HEIGHT : 0)
   if (fromFloor === toFloor) return routeOn(layout, fromFloor, flat(from), flat(to)).map(at(level(fromFloor))).map((point, index, all) => index === all.length - 1 ? to : point)
-  const up = fromFloor === 1
+  const up = fromFloor < toFloor
   const stairs: Vec3[] = [[STAIRS.lowX, 0, STAIRS.z], [STAIRS.highX, FLOOR_HEIGHT, STAIRS.z]]
   return [
     ...routeOn(layout, fromFloor, flat(from), up ? STAIRS_FOOT : STAIRS_HEAD).map(at(level(fromFloor))),

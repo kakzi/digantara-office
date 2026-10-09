@@ -5,7 +5,7 @@ import type { Job } from './org.js'
 const execFile = promisify(execFileCallback)
 const CACHE_MS = 10_000
 const INSIGHTS_CACHE_MS = 60_000
-const COMMAND_TIMEOUT_MS = 8_000
+const COMMAND_TIMEOUT_MS = 25_000
 const COMMAND_LOG_LIMIT = 100
 const LOG_TAIL_LINES = 200
 
@@ -553,12 +553,14 @@ export async function collectTaskBoard(run: Run = systemRun): Promise<TaskBoardS
  * `hermes profile list` is read with `hermes -p <profile> cron list --all` and its jobs are
  * tagged with the profile. If the profile list cannot be read, the active profile is read as before.
  */
+const CRON_CONCURRENCY = 2
+
 export async function collectCalendar(run: Run = systemRun): Promise<CalendarSnapshot> {
   const fetchedAt = new Date().toISOString()
   const profiles = await read(run, 'hermes', ['profile', 'list'], parseProfiles, [])
   const names = profiles.availability === 'available' ? profiles.data.map((profile) => profile.name).filter((name) => PROFILE_NAME.test(name)) : []
   if (names.length === 0) return { jobs: await read(run, 'hermes', ['cron', 'list', '--all'], parseCronJobs, []), fetchedAt }
-  const results = await Promise.all(names.map((name) => read(run, 'hermes', ['-p', name, 'cron', 'list', '--all'], parseCronJobs, [])))
+  const results = await mapLimit(names, CRON_CONCURRENCY, (name) => read(run, 'hermes', ['-p', name, 'cron', 'list', '--all'], parseCronJobs, []))
   if (results.every((result) => result.availability !== 'available')) return { jobs: results[0], fetchedAt }
   const jobs = results.flatMap((result, index) => result.availability === 'available' ? result.data.map((job) => ({ ...job, agent: names[index] })) : [])
   const failedProfiles = names.filter((_, index) => results[index].availability !== 'available')
@@ -754,7 +756,7 @@ export async function collectTaskDetail(id: string, run: Run = systemRun, board?
 
 export const ACTIVITY_WINDOW = '3m'
 /** At most this many profiles are probed at once, so many profiles do not flood the machine. */
-const ACTIVITY_CONCURRENCY = 4
+const ACTIVITY_CONCURRENCY = 2
 const LOG_RECORD = /^(\d{4}-\d{2}-\d{2}[ T][\d:,.]+)\s+[A-Z]+(?:\s+\[[^\]]*\])?\s+([\w.]+):\s?(.*)$/
 const CHAT_MESSAGE = /\b(message|reply|replied|respond|inbound|outbound|received|sending|sent|chat)\b/i
 const ACTIVITY_LABELS: Record<ActivityKind, string> = {

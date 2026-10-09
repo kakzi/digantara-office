@@ -1,7 +1,9 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { execSync } from 'node:child_process'
 import express, { type NextFunction, type Request, type Response } from 'express'
+import Database from 'better-sqlite3'
 import { excludedFor, FolderError, listFolder, publicAgent, readFolderFile, resolveAgentFolders } from './folders.js'
 import { installAccess } from './access.js'
 import { redactActivity, redactCalendar, redactDashboard, redactLogs, redactMemory, redactOffice, redactTasks, redactUsage } from './privacy.js'
@@ -11,7 +13,7 @@ import { collectMemory } from './memory.js'
 import { installOrg, withJobs } from './org.js'
 import { getActivity, getCalendar, getChannels, getCommandLog, getDashboard, getKnowledge, getLogs, getOffice, getSnapshot, getTaskBoard, getTaskDetail, getUsage } from './mission-control.js'
 
-const HOST = '127.0.0.1'
+const HOST = '0.0.0.0'
 // MISSION_CONTROL_PORT is the pre-rename name, still honoured.
 const PORT = Number(process.env.RUANG_PORT ?? process.env.MISSION_CONTROL_PORT) || 3001
 // The built UI sits next to the server: ../dist from server/*.ts (development, npm start)
@@ -20,6 +22,7 @@ const distDirectory = [new URL('../dist', import.meta.url), new URL('../../dist'
 
 const app = express()
 app.disable('x-powered-by')
+app.use(express.json())
 app.use('/api', (_request, response, next) => {
   response.set('Cache-Control', 'no-store')
   next()
@@ -27,6 +30,132 @@ app.use('/api', (_request, response, next) => {
 
 const startedAt = new Date().toISOString()
 app.get('/api/health', (_request, response) => { response.json({ ok: true, apiVersion: API_VERSION, startedAt }) })
+app.get('/api/simulator', (_request, response) => {
+  try {
+    const metricsPath = '/home/ubuntu/bmtnu-core/simulator/metrics.json'
+    const auditPath = '/home/ubuntu/bmtnu-core/simulator/audit-report.json'
+    const metrics = existsSync(metricsPath) ? JSON.parse(readFileSync(metricsPath, 'utf8')) : null
+    const audit = existsSync(auditPath) ? JSON.parse(readFileSync(auditPath, 'utf8')) : null
+    response.json({ ok: true, metrics, audit })
+  } catch (e: any) {
+    response.status(500).json({ ok: false, error: e.message })
+  }
+})
+
+app.get('/api/bmt/cabang-live', (request, response) => {
+  try {
+    const db = new Database('/home/ubuntu/bmtnu-core/data/bmtnu.db', { readonly: true })
+    const officeId = request.query.office_id ? Number(request.query.office_id) : 2
+
+    const offices = db.prepare('SELECT id, name, code, kode_kantor, address, phone FROM offices ORDER BY id').all()
+    const office = (db.prepare('SELECT id, name, code, kode_kantor, address, phone FROM offices WHERE id = ?').get(officeId) || offices[1]) as any
+
+    const users = db.prepare(`
+      SELECT u.id, u.name, u.email, u.role_id, r.name as role_name
+      FROM users u
+      JOIN roles r ON r.id = u.role_id
+      WHERE u.office_id = ?
+    `).all(office.id)
+
+    const bm = users.find((u: any) => u.role_id === 5) || null
+    const teller = users.find((u: any) => u.role_id === 3) || null
+    const marketing = users.filter((u: any) => u.role_id === 4)
+
+    const session = db.prepare(`
+      SELECT s.id, s.user_id, s.status, s.opening_balance, s.system_balance, s.opened_at
+      FROM teller_sessions s
+      WHERE s.office_id = ?
+      ORDER BY s.id DESC LIMIT 1
+    `).get(office.id) || null
+
+    const savingStats = db.prepare(`
+      SELECT count(*) as count, coalesce(sum(balance), 0) as total_saldo
+      FROM saving_accounts
+      WHERE office_id = ? AND status = 'active'
+    `).get(office.id)
+
+    const financingStats = db.prepare(`
+      SELECT count(*) as count, coalesce(sum(outstanding_principal), 0) as total_outstanding
+      FROM financing_accounts
+      WHERE office_id = ? AND status = 'active'
+    `).get(office.id)
+
+    const recentTx = db.prepare(`
+      SELECT t.id, t.transaction_type, t.amount, t.description, t.created_at, a.account_number, g.name as member_name
+      FROM saving_transactions t
+      JOIN saving_accounts a ON a.id = t.saving_account_id
+      LEFT JOIN register_anggotas g ON g.id = a.register_anggota_id
+      WHERE a.office_id = ?
+      ORDER BY t.id DESC LIMIT 8
+    `).all(office.id)
+
+    const networkSummary = {
+      totalOffices: offices.length,
+      totalSavingAccounts: (db.prepare(`SELECT count(*) as c FROM saving_accounts WHERE status = 'active'`).get() as any).c,
+      totalFinancingAccounts: (db.prepare(`SELECT count(*) as c FROM financing_accounts WHERE status = 'active'`).get() as any).c,
+      totalJournals: (db.prepare('SELECT count(*) as c FROM journals').get() as any).c
+    }
+
+    db.close()
+
+    response.json({
+      ok: true,
+      office,
+      offices,
+      staff: { bm, teller, marketing },
+      session,
+      savingStats,
+      financingStats,
+      recentTx,
+      networkSummary
+    })
+  } catch (err: any) {
+    response.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+app.get('/api/bmt/daily-routine', (_request, response) => {
+  try {
+    const routinePath = '/home/ubuntu/bmtnu-core/simulator/routine-status.json'
+    if (existsSync(routinePath)) {
+      const data = JSON.parse(readFileSync(routinePath, 'utf8'))
+      response.json({ ok: true, data })
+    } else {
+      response.status(404).json({ ok: false, error: 'Routine status file not found' })
+    }
+  } catch (err: any) {
+    response.status(500).json({ ok: false, error: err.message })
+  }
+})
+
+app.post('/api/bmt/daily-routine/action', (request, response) => {
+  try {
+    const { action, minutes, phase } = request.body || {}
+    let cmd = ''
+    if (action === 'advance_time') {
+      const m = Number(minutes) || 15
+      cmd = `bun -e "import { routineManager } from './simulator/daily-routine'; routineManager.advanceTime(${m}); console.log(JSON.stringify(routineManager.getStatus()));"`
+    } else if (action === 'set_phase') {
+      const p = phase || '08:00_PELAYANAN_PAGI'
+      cmd = `bun -e "import { routineManager } from './simulator/daily-routine'; routineManager.setPhase('${p}'); console.log(JSON.stringify(routineManager.getStatus()));"`
+    } else if (action === 'run_eom') {
+      cmd = `bun -e "import { routineManager } from './simulator/daily-routine'; const res = await routineManager.runEndOfMonthProcess(); console.log(JSON.stringify({ res, status: routineManager.getStatus() }));"`
+    } else {
+      return response.status(400).json({ ok: false, error: 'Unknown action' })
+    }
+
+    const output = execSync(cmd, { cwd: '/home/ubuntu/bmtnu-core', timeout: 30000 }).toString()
+    let parsed: any = null
+    try {
+      parsed = JSON.parse(output.trim().split('\n').pop() || '{}')
+    } catch {
+      parsed = { raw: output }
+    }
+    response.json({ ok: true, result: parsed })
+  } catch (err: any) {
+    response.status(500).json({ ok: false, error: err.message })
+  }
+})
 
 // Optional access code (off by default): locks every other /api route until it is entered.
 installAccess(app)

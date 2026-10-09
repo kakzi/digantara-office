@@ -188,20 +188,44 @@ function GroundFloor({ night, layout }: { night: boolean; layout: OfficeLayout }
   </group>
 }
 
-/** Lantai 1 seen from lantai 2: the closed building with its windows, and the stairs below the stairwell. */
-function BuildingShell({ night }: { night: boolean }) {
+/** Closed building shell for lower floors when looking from above in a modern 3-story minimalist house. */
+function BuildingShell({ level = 1, night }: { level?: number; night: boolean }) {
   const { minX, maxX, minZ, maxZ } = BUILDING
   const H = FLOOR_HEIGHT
+  const yOffset = (level - 1) * FLOOR_HEIGHT
   const walls: WallSpec[] = [
-    { from: [minX, minZ], to: [maxX, minZ], height: H }, { from: [minX, minZ], to: [minX, maxZ], height: H }, { from: [maxX, minZ], to: [maxX, maxZ], height: H },
-    { from: [minX, maxZ], to: [ENTRANCE.fromX, maxZ], height: H }, { from: [ENTRANCE.toX, maxZ], to: [maxX, maxZ], height: H },
+    { from: [minX, minZ], to: [maxX, minZ], height: H },
+    { from: [minX, minZ], to: [minX, maxZ], height: H },
+    { from: [maxX, minZ], to: [maxX, maxZ], height: H },
+    { from: [minX, maxZ], to: level === 1 ? [ENTRANCE.fromX, maxZ] : [maxX, maxZ], height: H },
   ]
-  return <group>
+  if (level === 1) {
+    walls.push({ from: [ENTRANCE.toX, maxZ], to: [maxX, maxZ], height: H })
+  }
+  return <group position={[0, yOffset, 0]}>
     {walls.map((spec, index) => <WallView key={index} spec={spec}/>)}
-    <RBox position={[(ENTRANCE.fromX + ENTRANCE.toX) / 2, 1.15, maxZ]} size={[ENTRANCE.toX - ENTRANCE.fromX, 2.3, 0.05]} radius={0.01} color="#cfe8ee" opacity={0.35} roughness={0.05}/>
-    {[-11, -7, -3.5, 3.5, 7, 11].map((x) => <Window key={x} position={[x, 1.45, maxZ + 0.14]} night={night}/>)}
-    {[-7, 0, 7].map((z) => <group key={z} rotation={[0, -Math.PI / 2, 0]} position={[minX - 0.14, 1.45, z]}><Window position={[0, 0, 0]} width={1.6} night={night}/></group>)}
-    <Items floor={1} night={night} filter={(item) => item.kind === 'staircase'}/>
+    {/* Architectural Vertical Cedar Slats for Gen Z Minimalist Aesthetic */}
+    {[-12, -10, -8, 8, 10, 12].map((x) => (
+      <RBox key={`woodslat-${level}-${x}`} position={[x, H / 2, maxZ + 0.08]} size={[0.16, H * 0.9, 0.06]} radius={0.02} color="#c49a6c" roughness={0.5} />
+    ))}
+    {level === 1 ? (
+      <>
+        {/* Modern Minimalist Glass Entrance & Canopy */}
+        <RBox position={[(ENTRANCE.fromX + ENTRANCE.toX) / 2, 1.25, maxZ]} size={[ENTRANCE.toX - ENTRANCE.fromX, 2.5, 0.06]} radius={0.01} color="#dbeafe" opacity={0.35} roughness={0.05}/>
+        <RBox position={[(ENTRANCE.fromX + ENTRANCE.toX) / 2, 2.55, maxZ + 0.4]} size={[ENTRANCE.toX - ENTRANCE.fromX + 0.8, 0.1, 0.9]} radius={0.02} color="#1e2329" metalness={0.8}/>
+        {[-11, -7, -3.5, 3.5, 7, 11].map((x) => <Window key={x} position={[x, 1.45, maxZ + 0.14]} night={night}/>)}
+        {[-7, 0, 7].map((z) => <group key={z} rotation={[0, -Math.PI / 2, 0]} position={[minX - 0.14, 1.45, z]}><Window position={[0, 0, 0]} width={1.6} night={night}/></group>)}
+        <Items floor={1} night={night} filter={(item) => item.kind === 'staircase'}/>
+      </>
+    ) : (
+      <>
+        {/* Modern Minimalist Cantilever Box & Ribbon Windows */}
+        {[-10, -5, 0, 5, 10].map((x) => <Window key={`l2-win-${x}`} position={[x, 1.45, maxZ + 0.14]} night={night}/>)}
+        {[-6, 0, 6].map((z) => <group key={`l2-side-${z}`} rotation={[0, -Math.PI / 2, 0]} position={[minX - 0.14, 1.45, z]}><Window position={[0, 0, 0]} width={1.6} night={night}/></group>)}
+        {/* Cantilever Slab Accent */}
+        <RBox position={[0, 0, maxZ + 0.15]} size={[maxX - minX + 0.3, 0.14, 0.4]} radius={0.02} color="#2b2f36" roughness={0.7} />
+      </>
+    )}
   </group>
 }
 
@@ -222,6 +246,20 @@ function UpperFloor({ night, layout }: { night: boolean; layout: OfficeLayout })
   </group>
 }
 
+/** Lantai 3: Penthouse CEO, Rooftop Cinema, Sky Gym, Sky Garden with Saung & Koi Pond, Pergola & BBQ, and Perimeter Glass Railings */
+function ThirdFloor({ night }: { night: boolean }) {
+  const { minX, maxX, minZ, maxZ } = BUILDING
+  const hole = { minX: STAIRS.highX, maxX: STAIRS.lowX, minZ: STAIRS.z - STAIRS.width / 2 - 0.05 }
+  const slab: [number, number, number, number][] = [[minX, maxX, minZ, hole.minZ], [minX, hole.minX, hole.minZ, maxZ], [hole.maxX, maxX, hole.minZ, maxZ]]
+  return <group position={[0, FLOOR_HEIGHT * 2, 0]}>
+    {slab.map(([x1, x2, z1, z2]) => <RBox key={`${x1},${z1}`} position={[(x1 + x2) / 2, -0.11, (z1 + z2) / 2]} size={[x2 - x1, 0.22, z2 - z1]} radius={0.01} color="#ded9cc"/>)}
+    <Floorings floor={3}/>
+    {WALLS[3].map((spec, index) => <WallView key={index} spec={spec}/>)}
+    <Items floor={3} night={night}/>
+    {[[-9, 7], [9, 7], [-9, -7], [3, -7], [10, -7]].map(([x, z]) => <OfficeLight key={`${x},${z}`} position={[x, 2.4, z]} night={night}/>)}
+  </group>
+}
+
 /** The grounds: lawn, sidewalk, road, and the gang (alley) with the street food left of the building. */
 function Outdoors({ night }: { night: boolean }) {
   const lawn = useMemo(() => grass([16, 12]), [])
@@ -238,10 +276,23 @@ function Outdoors({ night }: { night: boolean }) {
   </group>
 }
 
-/** The grounds plus the floor in view: lantai 1 as a cut-away, or lantai 2 on top of the closed building. */
+/** The grounds plus the floor in view: lantai 1 as a cut-away, lantai 2, or lantai 3 on top of the closed building tiers. */
 export function Environment({ night = false, layout, floor = 1 }: { night?: boolean; layout: OfficeLayout; floor?: FloorNumber }) {
   return <group>
-    {floor === 1 ? <GroundFloor night={night} layout={layout}/> : <><BuildingShell night={night}/><UpperFloor night={night} layout={layout}/></>}
+    {floor === 1 && <GroundFloor night={night} layout={layout}/>}
+    {floor === 2 && (
+      <>
+        <BuildingShell level={1} night={night}/>
+        <UpperFloor night={night} layout={layout}/>
+      </>
+    )}
+    {floor === 3 && (
+      <>
+        <BuildingShell level={1} night={night}/>
+        <BuildingShell level={2} night={night}/>
+        <ThirdFloor night={night}/>
+      </>
+    )}
     <Outdoors night={night}/>
   </group>
 }

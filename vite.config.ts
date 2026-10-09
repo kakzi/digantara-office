@@ -5,5 +5,6 @@ export default defineConfig({
   plugins: [react()],
   // three.js lives in its own lazily loaded chunk (the 3D office view).
   build: { chunkSizeWarningLimit: 1100 },
-  server: { proxy: { '/api': 'http://127.0.0.1:3001' } },
+  server: { host: '0.0.0.0', proxy: { '/api': 'http://127.0.0.1:3001' } },
+  preview: { host: '0.0.0.0', port: 5173, proxy: { '/api': 'http://127.0.0.1:3001' } },
 })

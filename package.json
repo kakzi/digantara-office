@@ -23,17 +23,21 @@
     "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "vite",
     "dev:server": "tsx watch server/index.ts",
+    "prod": "concurrently -k \"node build/server/index.js\" \"vite preview\"",
     "build": "tsc -b && vite build && tsc -p tsconfig.server.build.json",
     "start": "node bin/ruang.js",
     "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "better-sqlite3": "^13.0.3",
     "express": "^5.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@react-three/fiber": "^9.8.1",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.3",
     "@types/node": "^24.6.0",
     "@types/react": "^19.1.16",

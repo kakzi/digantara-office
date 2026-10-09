@@ -346,8 +346,9 @@ function Lighting({ theme }: { theme: 'dark' | 'light' }) {
 }
 
 const FLOORS: { floor: Floor; label: string; title: string }[] = [
-  { floor: 2, label: 'Kamar & Rooftop', title: 'Lantai 2: dorm, lesehan, rooftop terrace and garden' },
-  { floor: 1, label: 'Kantor', title: 'Lantai 1: divisions, meeting room, mushola, commons and game room' },
+  { floor: 3, label: 'Lantai 3: Penthouse & Rooftop', title: 'Lantai 3: CEO Penthouse, Sky Cinema, Gym & Taman Atap' },
+  { floor: 2, label: 'Lantai 2: Studio & Dorm', title: 'Lantai 2: Creative Pods, Breakout Lounge & Dorm' },
+  { floor: 1, label: 'Lantai 1: Workspaces & Cafe', title: 'Lantai 1: Divisions, Meeting Pod, Barista Cafe & Mushola' },
 ]
 const FLOOR_KEY = 'mc.officeFloor'
 const SLEEP_KEY = 'mc.officeSleep'
@@ -363,7 +364,10 @@ function useStoredFlag(key: string): [boolean, (value: boolean) => void] {
 
 function useFloor(): [Floor, (floor: Floor) => void] {
   const [floor, setFloor] = useState<Floor>(() => {
-    try { return localStorage.getItem(FLOOR_KEY) === '2' ? 2 : 1 } catch { return 1 }
+    try {
+      const saved = Number(localStorage.getItem(FLOOR_KEY))
+      return (saved === 1 || saved === 2 || saved === 3 ? saved : 1) as Floor
+    } catch { return 1 }
   })
   return [floor, (next: Floor) => {
     setFloor(next)
@@ -433,7 +437,8 @@ export default function Office3D({ stations, onSelect }: { stations: OfficeStati
     view.current?.focus(area.focus, Math.max(12, (area.area.maxX - area.area.minX) * 1.7 + 6))
   }
   return <div className="office-3d" ref={setKeyTarget} tabIndex={0} role="region" aria-label="3D office. Drag to rotate, right-drag or two fingers to pan, scroll to zoom, arrow keys pan when focused. Page Up and Page Down change floors." onKeyDown={(event) => {
-    if (event.key === 'PageUp' || event.key === 'PageDown') { event.preventDefault(); setFloor(event.key === 'PageUp' ? 2 : 1) }
+    if (event.key === 'PageUp') { event.preventDefault(); setFloor(Math.min(3, floor + 1) as Floor) }
+    if (event.key === 'PageDown') { event.preventDefault(); setFloor(Math.max(1, floor - 1) as Floor) }
   }}>
     <Canvas shadows dpr={[1, 2]} camera={{ position: [-3, 13, 16], fov: 40, near: 0.5, far: 150 }} gl={{ antialias: true }}>
       <Lighting theme={theme}/>
@@ -455,7 +460,7 @@ export default function Office3D({ stations, onSelect }: { stations: OfficeStati
       </group>
       {stations.map((station) => <Character key={station.id} station={station} placement={placement(station)} layout={layout} floor={floor} onSelect={onSelect} anchor={register(anchors, `agent-${station.id}`)}/>)}
       <LabelProjector anchors={anchors} labels={labels}/>
-      <Controls key={layout.deskCount} ref={view} panMode={panMode} keyTarget={keyTarget} layout={layout} elevation={floor === 2 ? FLOOR_HEIGHT : 0}/>
+      <Controls key={layout.deskCount} ref={view} panMode={panMode} keyTarget={keyTarget} layout={layout} elevation={floor === 3 ? FLOOR_HEIGHT * 2 : floor === 2 ? FLOOR_HEIGHT : 0}/>
     </Canvas>
     <div className="office-3d-labels">
       {layout.deskInfo.map((desk, index) => desk.role && !desk.hot && desk.agent === undefined && <span key={`desk-${index}`} ref={register(labels, `desk-${index}`)} className="vacant-tag-3d" style={{ '--division': DIVISIONS[desk.division].color } as CSSProperties}>Vacant · {ROLE_INFO[desk.role!].title}</span>)}
